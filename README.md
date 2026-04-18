@@ -1,96 +1,45 @@
-# CurrencyWar C++
+## HSR 「货币战争」 环境刷取工具
 
-崩坏：星穹铁道「货币战争」自动化工具 — C++ 重写版。
+> 前提情要：  
+> 由于作者游玩HSR时被高难度货币战争的逆天环境吓哭，遂与AI合作开发此工具，帮助自己和其他玩家自动刷取理想的投资环境。
+> 此版本通过C++重写，减少了[Python版本](https://github.com/YsKiKi/AutoCurrencyWar)过于笨重的问题，并对GUI相关逻辑进行了优化。
 
-## 功能
+HSR「货币战争」自动刷取工具。通过 PaddleOCR 识别投资环境与 Debuff，自动循环进入 → 识别 → 筛选 → 退出重开，直到匹配目标策略后停止并通知。
 
-- **自动化流程**：自动进入货币战争 → 识别投资环境 → 目标匹配 → 退出重置循环
-- **OCR 文字识别**：基于 PaddleOCR PP-OCRv4 (Paddle Inference C++) 的中文 OCR，用于识别投资策略和 Debuff
-- **模板匹配**：基于 OpenCV 的按钮图像识别
-- **透明覆盖层**：实时显示识别标记、日志和当前步骤
-- **GUI 配置界面**：Qt6 图形界面，支持策略/Debuff 搜索联想、区域框选、快捷键配置
-- **热键停止**：可自定义停止快捷键（默认 Delete）
+### 功能
 
-## 依赖
+- **自动循环**：开始货币战争 → 进入标准博弈 → 选择投资环境 → 不满意则退出重开
+- **OCR 识别**：基于 PaddleOCR 识别当前投资策略与 Debuff 文本
+- **模板匹配**：OpenCV 模板匹配识别游戏按钮状态
+- **策略筛选**：支持设置目标策略、不想要的 Debuff、需要的 Buff
+- **蓝海支持**：自动进入蓝海界面选择策略。赌一把！万一出了白嫖6金币
+- **可视化覆盖层**：实时显示 OCR 识别结果与当前步骤
+- **Qt6 GUI**：搜索联想选择策略/Debuff、框选识别区域、快捷键捕获
+- **快捷键停止**：支持自定义组合键（Ctrl/Alt/Shift+键 或单键）
 
-| 库 | 用途 |
-|---|---|
-| OpenCV 4.x | 图像处理、模板匹配 |
-| Paddle Inference C++ (CPU) | PaddleOCR PP-OCRv4 推理 |
-| nlohmann/json | JSON 配置文件解析 |
-| Qt6 Widgets | GUI 界面 |
+### 开始使用
 
-## 构建
+> [!IMPORTANT]
+> - 本工具中的button图片为2560x1440分辨率截图，如果你的设备使用不同分辨率，建议自行截图替换 `res/buttons/` 目录下对应的图片
+> - 请勿修改对应的图片命名，否则程序将无法识别按钮状态
 
-### 使用 vcpkg + CMake
-
-```powershell
-# 1. 安装 vcpkg（如果尚未安装）
-git clone https://github.com/microsoft/vcpkg.git
-.\vcpkg\bootstrap-vcpkg.bat
-
-# 2. 安装 vcpkg 依赖
-.\vcpkg\vcpkg install opencv4 nlohmann-json qt6 --triplet x64-windows
-
-# 3. 下载 Paddle Inference C++ 库
-# 从 https://www.paddlepaddle.org.cn/inference/master/guides/install/download_lib.html
-# 选择 Windows / CPU / C++ 版本下载并解压
-
-# 4. 构建项目
-cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DPADDLE_INFERENCE_DIR=<paddle_inference解压路径>
-cmake --build build --config Release
+克隆仓库到本地  
+```bash
+git clone https://github.com/YsKiKi/AutoCurrencyWar.git
 ```
 
-### PaddleOCR 模型文件
+#### 运行流程
+1. 运行 `build_all.ps1` 编译程序，生成 `build/` 目录，运行编译完成的 `CurrencyWar.exe`
+2. 选择目标策略和Debuff
+3. 切换标签页，设置OCR识别次数，框选识别区域，配置快捷键
+4. 启动！
 
-需要在 `res/ocr/` 目录下放置以下文件：
 
-- `ch_PP-OCRv4_det_infer/` — 文本检测模型
-- `ch_PP-OCRv4_rec_infer/` — 文本识别模型
-- `ppocr_keys_v1.txt` — 字符字典
+> [!NOTE]
+> - 程序启动时会自动请求管理员权限（UAC），HSR为高权限窗口，必须以管理员权限运行才能正确截图和点击
+> - 需要先启动HSR并进入货币战争界面
+> - OCR 识别区域需根据实际分辨率通过 GUI 框选调整
 
-详见 `res/ocr/README.txt` 中的下载地址。
+### License
 
-## 目录结构
-
-```
-CMakeLists.txt          # CMake 构建配置
-vcpkg.json              # vcpkg 依赖清单
-src/
-  main.cpp              # 入口（GUI/无GUI模式）
-  core/
-    config.h/cpp        # JSON 配置管理
-    window_controller.h/cpp  # 窗口查找、截图、鼠标控制
-    ocr_engine.h/cpp    # PaddleOCR (Paddle Inference) OCR 封装
-    image_matcher.h/cpp # OpenCV 模板匹配
-    overlay.h/cpp       # Win32 透明覆盖层
-    bot.h/cpp           # 自动化主控逻辑
-  gui/
-    main_window.h/cpp   # Qt6 GUI 界面
-res/
-  buttons/              # 按钮模板图像
-  strategy.txt          # 合法投资策略名称列表
-  debuff.txt            # 已知 Debuff 名称列表
-  ocr/                  # PaddleOCR 模型文件 (det/rec/dict)
-```
-
-## 用法
-
-```
-CurrencyWar.exe          # 启动 GUI 配置界面
-CurrencyWar.exe --nogui  # 无 GUI，使用 config.json 直接运行
-```
-
-## 从 Python 版本迁移
-
-原 Python 版本位于 `old_python/` 目录。C++ 版本完整重写了所有功能模块：
-
-| Python 模块 | C++ 对应 | 说明 |
-|---|---|---|
-| `core/window.py` | `core/window_controller.h/cpp` | Win32 API 直接调用（无 pywin32 依赖） |
-| `core/ocr.py` | `core/ocr_engine.h/cpp` | PaddleOCR (Python) → Paddle Inference C++ |
-| `core/vision.py` | `core/image_matcher.h/cpp` | OpenCV C++ API |
-| `core/overlay.py` | `core/overlay.h/cpp` | tkinter → Win32 GDI+ 覆盖层 |
-| `core/config.py` | `core/config.h/cpp` | dataclass → struct + nlohmann/json |
-| `core/bot.py` | `core/bot.h/cpp` | 完整流程逻辑重写 |
-| `gui/app.py` | `gui/main_window.h/cpp` | PyQt6 → Qt6 C++ |
+[GPL-3.0 License](./LICENSE)

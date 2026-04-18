@@ -15,17 +15,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Bootstrap vcpkg
-        run: .\vcpkg\bootstrap-vcpkg.bat
-        shell: cmd
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2c4c3aea0cc'
 
       - name: Install vcpkg dependencies
+        shell: pwsh
         run: |
-          .\vcpkg\vcpkg.exe install opencv4:x64-windows nlohmann-json:x64-windows qtbase:x64-windows --classic
-        shell: cmd
+          vcpkg install opencv4:x64-windows nlohmann-json:x64-windows qtbase:x64-windows
 
       - name: Download Paddle Inference
         shell: pwsh
@@ -46,9 +45,9 @@ jobs:
         run: |
           cmake -B build -S . `
             -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$PWD/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_MANIFEST_MODE=OFF `
-            -DCMAKE_PREFIX_PATH="$PWD/vcpkg/installed/x64-windows" `
+            -DCMAKE_PREFIX_PATH="$env:VCPKG_ROOT/installed/x64-windows" `
             -DPADDLE_INFERENCE_DIR="$PWD/paddle_inference_prod"
 
       - name: CMake Build
