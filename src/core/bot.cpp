@@ -685,15 +685,22 @@ std::string CurrencyWarBot::phase2() {
                     // 蓝海额外处理
                     olog("蓝海额外确认：扫描投资环境…");
                     auto lanhai_validated = stable_scan_env(1);
+                    std::string lanhai_inner_strategy = r.matched_strategy;
                     if (!lanhai_validated.empty()) {
                         auto& chosen = lanhai_validated[0];
                         olog("蓝海：点击投资策略 " + chosen.matched_strategy);
                         sleep_sec(CLICK_DELAY);
                         window_.click(chosen.center.first, chosen.center.second);
                         sleep_sec(STEP_DELAY);
+                        // 蓝海随机到目标策略时，视为命中目标
+                        auto lanhai_target = find_target_env(lanhai_validated);
+                        if (lanhai_target) {
+                            lanhai_inner_strategy = lanhai_target->matched_strategy;
+                            olog("★ 蓝海命中目标策略: " + lanhai_inner_strategy);
+                        }
                     }
                     wait_and_click_image("res/buttons/确认.png", TIMEOUT_SHORT);
-                    return r.matched_strategy;
+                    return lanhai_inner_strategy;
                 }
             }
         }
