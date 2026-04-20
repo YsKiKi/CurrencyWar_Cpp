@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,57 +17,119 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '01f602195983451bc83e72f4214af2c4c3aea0cc'
+          vcpkgGitCommitId: '256acc64012b23a13041d8705805e1f23b43a024'
+          vcpkgDirectory: '${{ runner.temp }}/vcpkg'
+          doNotCache: true
 
-      - name: Install vcpkg dependencies
+      - name: Cache vcpkg binary packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-binary-cache
+          key: vcpkg-binary-x64-windows-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-binary-x64-windows-
+
+      - name: Install vcpkg packages
         shell: pwsh
+        env:
+          VCPKG_BINARY_SOURCES: 'clear;files,${{ runner.temp }}/vcpkg-binary-cache,readwrite'
         run: |
-          vcpkg install opencv4:x64-windows nlohmann-json:x64-windows qtbase:x64-windows
+          New-Item -ItemType Directory -Path "${{ runner.temp }}/vcpkg-binary-cache" -Force | Out-Null
+          Write-Host "Installing vcpkg packages (classic mode with binary caching)..."
+          & "$env:VCPKG_ROOT/vcpkg" install --classic `
+            "opencv4[png,jpeg,webp,tiff]:x64-windows" `
+            "nlohmann-json:x64-windows" `
+            "qtbase:x64-windows"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Cache Paddle Inference
+        id: paddle-cache
+        uses: actions/cache@v4
+        with:
+          path: paddle_inference_prod
+          key: paddle-inference-3.0.0-cpu-avx-mkl
 
       - name: Download Paddle Inference
+        if: steps.paddle-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $url = "https://paddle-inference-lib.bj.bcebos.com/3.0.0/cxx_c/Windows/CPU/x86-64_avx-mkl-vs2019/paddle_inference.zip"
           Write-Host "Downloading Paddle Inference..."
           Invoke-WebRequest -Uri $url -OutFile paddle_inference.zip -UseBasicParsing
           Write-Host "Extracting..."
-          Expand-Archive -Path paddle_inference.zip -DestinationPath . -Force
-          # The archive extracts to paddle_inference/ — rename to paddle_inference_prod/
-          if (Test-Path "paddle_inference") {
-            Rename-Item "paddle_inference" "paddle_inference_prod"
-          }
+          Expand-Archive -Path paddle_inference.zip -DestinationPath paddle_tmp -Force
           Remove-Item paddle_inference.zip -Force
+          # Find the actual extracted root (may be paddle_inference, paddle_inference_install_dir, etc.)
+          $extracted = Get-ChildItem -Path paddle_tmp -Directory | Select-Object -First 1
+          if ($extracted -and (Test-Path "$($extracted.FullName)/paddle/include")) {
+            Move-Item $extracted.FullName "paddle_inference_prod"
+          } else {
+            # No subfolder — files extracted directly
+            Rename-Item "paddle_tmp" "paddle_inference_prod"
+          }
+          if (Test-Path "paddle_tmp") { Remove-Item "paddle_tmp" -Recurse -Force }
+          # Verify
+          if (-not (Test-Path "paddle_inference_prod/paddle/include/paddle_inference_api.h")) {
+            Write-Host "::error::paddle_inference_api.h not found! Contents:"
+            Get-ChildItem -Path paddle_inference_prod -Recurse -Depth 3 | Select-Object FullName
+            exit 1
+          }
+          Write-Host "Paddle Inference ready at paddle_inference_prod/"
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
 
       - name: CMake Configure
         shell: pwsh
         run: |
           cmake -B build -S . `
-            -G "Visual Studio 17 2022" -A x64 `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_MANIFEST_MODE=OFF `
-            -DCMAKE_PREFIX_PATH="$env:VCPKG_ROOT/installed/x64-windows" `
-            -DPADDLE_INFERENCE_DIR="$PWD/paddle_inference_prod"
+            -DPADDLE_INFERENCE_DIR="$PWD/paddle_inference_prod" `
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: CMake Build
-        run: cmake --build build --config Release
+        run: cmake --build build
+
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref_name }}"
+          if ("${{ github.ref_type }}" -eq "tag") {
+            $ver = $ref
+          } else {
+            $short = git rev-parse --short HEAD
+            $ver = "dev-$ref-$short"
+          }
+          "version=$ver" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
 
       - name: Package Release
         shell: pwsh
         run: |
+          $ver = "${{ steps.version.outputs.version }}"
           $stageDir = "CurrencyWar"
           New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
 
           # Copy all DLLs and EXE
-          Copy-Item "build\Release\*.exe" $stageDir
-          Copy-Item "build\Release\*.dll" $stageDir
+          Copy-Item "build\*.exe" $stageDir
+          Copy-Item "build\*.dll" $stageDir
 
           # Copy subdirectories (platforms/, styles/, res/)
           $subdirs = @("platforms", "styles", "res")
           foreach ($dir in $subdirs) {
-            $src = "build\Release\$dir"
+            $src = "build\$dir"
             if (Test-Path $src) {
               Copy-Item $src "$stageDir\$dir" -Recurse
             }
@@ -76,21 +139,32 @@ jobs:
           $cfg = "$stageDir\config.json"
           if (Test-Path $cfg) { Remove-Item $cfg }
 
-          Compress-Archive -Path "$stageDir\*" -DestinationPath "CurrencyWar-${{ github.ref_name }}.zip"
+          Compress-Archive -Path $stageDir -DestinationPath "CurrencyWar-$ver.zip"
 
       - name: Get tag commit message
+        if: github.ref_type == 'tag'
         id: tag_message
         shell: pwsh
         run: |
           $msg = git tag -l --format='%(contents)' "${{ github.ref_name }}"
           if (-not $msg) { $msg = git log -1 --format='%B' }
-          # Write to GITHUB_OUTPUT (multi-line safe)
-          $escaped = $msg -replace '%', '%25' -replace "`r", '' -replace "`n", '%0A'
-          "body=$escaped" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          # Write multi-line to GITHUB_OUTPUT using heredoc delimiter
+          $delim = "EOF_$(Get-Random)"
+          "body<<$delim" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          $msg | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          $delim | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
 
       - name: Create Release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           body: ${{ steps.tag_message.outputs.body }}
-          files: CurrencyWar-${{ github.ref_name }}.zip
+          files: CurrencyWar-${{ steps.version.outputs.version }}.zip
+
+      - name: Upload build artifact
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CurrencyWar-${{ steps.version.outputs.version }}
+          path: CurrencyWar-${{ steps.version.outputs.version }}.zip

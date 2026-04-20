@@ -2,8 +2,13 @@
   "name": "currency-war",
   "version": "1.0.0",
   "description": "CurrencyWar automation for Honkai: Star Rail",
+  "builtin-baseline": "256acc64012b23a13041d8705805e1f23b43a024",
   "dependencies": [
-    "opencv4",
+    {
+      "name": "opencv4",
+      "default-features": false,
+      "features": ["png", "jpeg", "webp", "tiff"]
+    },
     "nlohmann-json",
     "qtbase"
   ]

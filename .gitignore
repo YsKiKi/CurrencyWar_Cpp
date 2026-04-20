@@ -43,7 +43,6 @@ Desktop.ini
 *.pdb
 *.ilk
 *.exp
-*.lib
-*.dll
-*.exe
-!src/**
+/build/**/*.lib
+/build/**/*.dll
+/build/**/*.exe
