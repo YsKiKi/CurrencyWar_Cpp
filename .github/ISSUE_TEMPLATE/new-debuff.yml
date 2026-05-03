@@ -1,0 +1,46 @@
+name: 新增 Debuff 反馈
+description: 反馈游戏版本更新后新出现的 Debuff，帮助维护识别列表。
+title: "[Debuff] "
+labels: ["debuff", "game-update"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的反馈！请填写以下信息，帮助我们及时将新 Debuff 加入识别列表。
+
+  - type: input
+    id: debuff-name
+    attributes:
+      label: Debuff 名称
+      description: 请填写游戏内显示的 Debuff 名称（可填写多个，用逗号分隔）。
+      placeholder: 例如：新增Debuff1, 新增Debuff2
+    validations:
+      required: true
+
+  - type: input
+    id: game-version
+    attributes:
+      label: 游戏版本
+      description: 发现此 Debuff 时的游戏版本号。
+      placeholder: 例如：2.8.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Debuff 截图
+      description: |
+        请附上包含 Debuff 名称的游戏截图，**截图越清晰越好**。
+        可直接拖拽或粘贴图片到此处。
+      placeholder: 在此处粘贴或拖入截图...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 补充说明
+      description: 其他需要说明的信息，例如触发条件、出现的具体关卡等。
+    validations:
+      required: false

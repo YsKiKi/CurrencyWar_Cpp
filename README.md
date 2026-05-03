@@ -6,6 +6,12 @@
 
 HSR「货币战争」自动刷取工具。通过 PaddleOCR 识别投资环境与 Debuff，自动循环进入 → 识别 → 筛选 → 退出重开，直到匹配目标策略后停止并通知。
 
+
+> [!WARNING]
+> 内置 Debuff 列表基于当前版本整理，游戏更新后可能出现未收录的新 Debuff，导致识别遗漏。
+> 如果你发现工具未能识别某个 Debuff，请 [提交 Issue](https://github.com/YsKiKi/CurrencyWar_Cpp/issues/new?template=new-debuff.yml) 并附上截图，帮助我们及时更新列表。
+> 当前版本 Debuff 列表完全未完全覆盖
+
 ### 功能
 
 - **自动循环**：开始货币战争 → 进入标准博弈 → 选择投资环境 → 不满意则退出重开
